@@ -5,6 +5,7 @@ from time import sleep
 from datetime import datetime
 
 import framework
+import voltmeter
 
 from helpers import *
 
@@ -49,6 +50,15 @@ def test_read_simple(dut):
         write_value(my_interface, sent)
         value = read_value(my_interface)
         # TODO implement missing logic here
+        val_string = remove_whitespace(value)
+		
+        if val_string != str(sent):
+            print("incorrect value! Got: " + val_string + ", expected: " + str(sent))
+            results.append("FAIL")
+        else:
+            print("OK! Got: " + val_string + ", expected: " + str(sent))
+            results.append("PASS")
+			
         sleep(2)
         dut.board.reset()
 
@@ -77,11 +87,12 @@ def test_read_range(dut):
         write_value(dut.board.default_interface, sent)
         value = read_value(dut.board.default_interface)
 
-        if value != sent:
-            print("incorrect value! Got: " + value + ", expected: " + str(sent))
+        val_string = remove_whitespace(value)
+        if val_string != str(sent):
+            print("incorrect value! Got: " + val_string + ", expected: " + str(sent))
             results.append("FAIL")
         else:
-            print("OK! Got: " + value + ", expected: " + str(sent))
+            print("OK! Got: " + val_string + ", expected: " + str(sent))
             results.append("PASS")
 
     # end test content
@@ -107,70 +118,41 @@ def test_invalid_values(dut):
     dut.board.reset()
     my_interface = dut.board.default_interface
 
-    command = "1234\r"  # valid
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
+    # List of commands to send
+    command = ["1234", " 1234", "4321", "test", "0est", "tes1", "01234", "012345678", "0", "100", "500", "1000", "2000"]
 
-    command = " 1234\r"
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
+    # begin test content
+    for i in range(0, len(command), 1):
+        my_interface.write(command[i] + "\r")	# add cartridge return
+        print('Sending command >{}<'.format(command[i]))
+        value = read_value(my_interface)
+        val_string = remove_whitespace(value)
 
-    command = "4321\r"
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
-
-    command = "test\r"
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
-
-    command = "0est\r"
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
-
-    command = "tes1\r"
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
-
-    command = "01234\r"
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
-
-    command = "012345678\r"
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
-
-    command = "0\r"  # valid
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
-
-    command = "100\r"  # valid
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
-
-    command = "500\r"  # valid
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
-
-    command = "1000\r"  # valid
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
-
-    command = "2000\r"  # valid
-    my_interface.write(command)
-    value = read_value(my_interface)
-    sleep(1)
+        # valid command
+        if is_valid(val_string):
+            # last 4 bytes read back succesful -> PASS
+            if val_string == command[i][-4:]:
+                results.append("PASS")
+                print("Passed")
+            # failed to read command back -> FAIL
+            else:
+                results.append("FAIL")
+                print("Failed")
+        # invalid command
+        else:
+            # last 4 bytes read back successful -> PASS
+            if val_string == command[i][-4:]:
+                results.append("PASS")
+                print("Passed")
+            # nothing read back -> PASS
+            elif val_string == "":
+                results.append("PASS")
+                print("Passed")
+            # failed to read command back -> FAIL
+            else:
+                results.append("FAIL")
+                print("Failed")
+        sleep(1)
 
     # end test content
     result = check_results(results)
@@ -192,13 +174,41 @@ def test_measure(dut):
     results = []
     # begin test content
 
+    dut.board.reset()
+    my_interface = dut.board.default_interface
+    my_interface2 = dut.board.default_voltmeter
+
+    # set PWM and measure voltage
+    values = [0, 100, 500, 1000, 1500, 2000]
+    results = []
+
+    # set tolerance for voltage measurement (+-)
+    tolerance = 0.05
+#    for sent in values:
+    for i in range(0, len(values), 1):
+        write_value(my_interface, values[i])
+        sleep(0.1)
+        volts = read_value(my_interface2)
+        print("Measured DC: "+ str(round(float(volts),4))+"V")
+        expectedVoltage = round(((values[i] / 2000) * 3.3),4)
+        print("Expecting " + str(round(((values[i] / 2000) * 3.3),4)))
+        if ((float(volts) - expectedVoltage < tolerance) or (expectedVoltage - float(volts) < tolerance)):
+            print("Passed")
+            results.append("PASS")
+        else:
+            print("Failed")
+            results.append("FAIL")
+			
+        sleep(1)
+        dut.board.reset()
+
     # end test content
 
     result = check_results(results)
     return name, result
 
 
-def test_sequence(dut, test_cases):
+def test_sequence(dut, test_cases, firmware_file):
     """ Sequences tests and keeps a simple scoreboard for results.
     
     """
@@ -215,9 +225,14 @@ def test_sequence(dut, test_cases):
 
     print("Tests completed.\nSummary:")
 
+    # write test results to log file
+    file_name = firmware_file[len(firmware_file)-10:-4] + ".log"
+    log_file = open(file_name, "w")
+
     for r in results:
         print((r + ": ").ljust(50) + "[" + results[r].upper() + "]")
-
+        log_file.write((r + ": ").ljust(50) + "[" + results[r].upper() + "]\r\n")
+    log_file.close()
 
 def main():
     """ Brings up the board and starts the test sequence.
@@ -225,8 +240,8 @@ def main():
     """
     # ENVIRONMENT CONFIGURATION -------------------------------------------------
 
-    serial_port = "COMx"     # serial_port = "/dev/ttyUSB0"
-    firmware_file = "MyFirmware.bin" # optionally overridden with command line argument
+    serial_port = "COM7"     # serial_port = "/dev/ttyUSB0"
+    firmware_file = "firmware\\tamk_1.bin" # optionally overridden with command line argument
     board_name = "MyBoard"
     dut_name = "MyIndividualDut"
 
@@ -244,10 +259,11 @@ def main():
 
 
     # TODO Voltmeter yet unfinished!
-    # myvoltmeter = framework.VoltMeter()
-    # myboard.add_interface("VoltMeter", myvoltmeter)
+    myvoltmeter = framework.VoltMeter()
+    myboard.add_interface("VoltMeter", myvoltmeter)
 
     myboard.set_default_interface("Serial")
+    myboard.set_default_voltmeter("VoltMeter")
 
     sleep(1)
 
@@ -275,7 +291,8 @@ def main():
         test_measure
     ]
 
-    test_sequence(mydut, test_cases)
+    # added firmware_file to parameters to write log file
+    test_sequence(mydut, test_cases, firmware_file)
 
 
 if __name__ == "__main__":

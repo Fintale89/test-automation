@@ -1,0 +1,4 @@
+Simple reading test for few individual values:    [FAIL]
+Simple reading test for value range:              [FAIL]
+Simple reading test for few invalid values:       [PASS]
+Voltage Measurement task:                         [PASS]

@@ -3,7 +3,7 @@
 import os
 from time import sleep
 
-# import voltmeter
+import voltmeter
 from helpers import error_handler
 
 try:
@@ -89,6 +89,9 @@ class Board(object):
     def set_default_interface(self, interface_name):
         self.default_interface = self.interfaces[interface_name]
 
+    def set_default_voltmeter(self, interface_name):
+        self.default_voltmeter = self.interfaces[interface_name]
+
     def reset(self):
         Programmer().cli.reset_board()
         
@@ -122,17 +125,22 @@ class VoltMeter(Interf):
         name = "VoltMeter at Digilent AnalogDiscovery 2 " + voltmeter.get_version()
         super().__init__(name)
         # TODO add content
+        voltmeter.open()
+        voltmeter.setup_acquisition()
 
     def read(self):
         # TODO add content and remove 'pass'
-        pass
+#        pass
+#        dc = voltmeter.meas_vdc(0)
+#        print ("DC: "+ str(round(dc,4))+"V")
+        return voltmeter.meas_vdc(0)
 
     def write(self, string):
         raise RuntimeError("This interface is read-only")
 
     def __del__(self):
-        pass
-        # voltmeter.close()
+#        pass
+        voltmeter.close()
 
 
 class Serial(Interf):
